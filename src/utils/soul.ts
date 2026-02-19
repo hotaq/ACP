@@ -2,6 +2,35 @@ import crypto from 'crypto';
 import { config, getSoulExpiryMs } from '../config/index.js';
 import type { SoulPayload, Agent } from '../types/index.js';
 
+// API Key prefix for identification
+const API_KEY_PREFIX = 'acp_live_';
+
+/**
+ * Generate a permanent API key (format: acp_live_xxx)
+ * Returns the plain text key (shown once to user)
+ */
+export const generateApiKey = (): string => {
+  const randomBytes = crypto.randomBytes(32).toString('base64url');
+  return `${API_KEY_PREFIX}${randomBytes}`;
+};
+
+/**
+ * Hash an API key for secure storage
+ */
+export const hashApiKey = (apiKey: string): string => {
+  return crypto
+    .createHash('sha256')
+    .update(apiKey)
+    .digest('hex');
+};
+
+/**
+ * Check if a string looks like an API key
+ */
+export const isApiKey = (token: string): boolean => {
+  return token.startsWith(API_KEY_PREFIX);
+};
+
 export const generateSoul = (agent: Agent): string => {
   const now = Date.now();
   const payload: SoulPayload = {

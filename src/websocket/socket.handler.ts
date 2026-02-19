@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { verifySoul } from '../utils/soul.js';
+import { verifySoul, isApiKey, hashApiKey } from '../utils/soul.js';
 import { agentService } from '../modules/agent/agent.service.js';
 import { messageService } from '../modules/message/message.service.js';
 import { queueService } from '../modules/queue/queue.service.js';
@@ -22,31 +22,50 @@ export class SocketHandler {
     // Authentication middleware
     this.io.use(async (socket: Socket, next) => {
       try {
-        const soul = socket.handshake.auth.soul || socket.handshake.headers.authorization;
+        const token = socket.handshake.auth.soul ||
+                      socket.handshake.auth.apiKey ||
+                      socket.handshake.headers.authorization;
 
-        if (!soul) {
+        if (!token) {
           return next(new Error('Authentication required'));
         }
 
-        // Extract soul from Bearer token if needed
-        const soulToken = soul.startsWith('Bearer ') ? soul.slice(7) : soul;
+        const tokenValue = token.startsWith('Bearer ') ? token.slice(7) : token;
+        let agentId: string;
+        let agentName: string;
+        let capabilities: string[];
 
-        const payload = verifySoul(soulToken);
-        if (!payload) {
-          return next(new Error('Invalid or expired soul token'));
+        if (isApiKey(tokenValue)) {
+          const apiKeyHash = hashApiKey(tokenValue);
+          const agent = await agentService.findByApiKeyHash(apiKeyHash);
+
+          if (!agent) {
+            return next(new Error('Invalid API key'));
+          }
+
+          agentId = agent.id;
+          agentName = agent.name;
+          capabilities = agent.capabilities;
+        } else {
+          const payload = verifySoul(tokenValue);
+          if (!payload) {
+            return next(new Error('Invalid or expired soul token'));
+          }
+
+          const agent = await agentService.findById(payload.agentId);
+          if (!agent) {
+            return next(new Error('Agent not found'));
+          }
+
+          agentId = payload.agentId;
+          agentName = payload.name;
+          capabilities = payload.capabilities;
         }
 
-        // Verify agent exists
-        const agent = await agentService.findById(payload.agentId);
-        if (!agent) {
-          return next(new Error('Agent not found'));
-        }
-
-        // Attach agent info to socket
         (socket as AuthenticatedSocket).data = {
-          agentId: payload.agentId,
-          agentName: payload.name,
-          capabilities: payload.capabilities,
+          agentId,
+          agentName,
+          capabilities,
           connectedAt: new Date(),
         };
 

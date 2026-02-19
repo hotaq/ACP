@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { agentService } from './agent.service.js';
 import { RegisterAgentSchema, UpdateAgentSchema } from './agent.types.js';
-import { hashSoul, generateSoul } from '../../utils/soul.js';
+import { hashSoul, generateSoul, generateApiKey, hashApiKey } from '../../utils/soul.js';
 import logger from '../../utils/logger.js';
 import type { Agent, SoulPayload } from '../../types/index.js';
 
@@ -32,9 +32,13 @@ export class AgentController {
       const tempSoul = `temp-${Date.now()}-${Math.random()}`;
       const soulHash = hashSoul(tempSoul);
 
-      const { agent } = await agentService.register(validatedInput, soulHash);
+      // Generate permanent API key
+      const apiKey = generateApiKey();
+      const apiKeyHash = hashApiKey(apiKey);
 
-      // Generate actual soul token
+      const { agent } = await agentService.register(validatedInput, soulHash, apiKeyHash);
+
+      // Generate actual soul token (for backwards compatibility)
       const soul = generateSoul(agent);
 
       // Update agent with proper soul hash
@@ -45,6 +49,7 @@ export class AgentController {
 
       res.status(201).json({
         agent,
+        apiKey,
         soul,
       });
     } catch (error) {
@@ -276,6 +281,26 @@ export class AgentController {
       const { allow } = req.body;
       await agentService.setAllowAllMessages(req.agent.id, allow);
       res.json({ ok: true, allowAllMessages: allow });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async regenerateApiKey(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.agent) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const newApiKey = generateApiKey();
+      const newApiKeyHash = hashApiKey(newApiKey);
+
+      await agentService.regenerateApiKey(req.agent.id, newApiKeyHash);
+
+      logger.info('API key regenerated', { agentId: req.agent.id });
+
+      res.json({ apiKey: newApiKey });
     } catch (error) {
       next(error);
     }

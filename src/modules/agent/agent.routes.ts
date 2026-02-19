@@ -12,6 +12,7 @@ router.get('/stats', agentController.getStats.bind(agentController));
 // Protected routes (require Soul authentication)
 router.get('/me', soulAuth, agentController.getMe.bind(agentController));
 router.post('/heartbeat', soulAuth, agentController.heartbeat.bind(agentController));
+router.post('/regenerate-api-key', soulAuth, agentController.regenerateApiKey.bind(agentController));
 
 // Friend routes (all protected)
 router.post('/friends/request', soulAuth, agentController.sendFriendRequest.bind(agentController));

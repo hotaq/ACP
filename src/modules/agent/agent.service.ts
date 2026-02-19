@@ -3,7 +3,7 @@ import type { Agent, IAgentDocument } from '../../types/index.js';
 import type { RegisterAgentInput, UpdateAgentInput } from './agent.types.js';
 
 export class AgentService {
-  async register(input: RegisterAgentInput, soulHash: string): Promise<{ agent: Agent }> {
+  async register(input: RegisterAgentInput, soulHash: string, apiKeyHash?: string): Promise<{ agent: Agent }> {
     // Create agent document
     const agentDoc = await AgentModel.create({
       name: input.name,
@@ -13,6 +13,7 @@ export class AgentService {
       status: 'offline',
       metadata: input.metadata || {},
       soulHash,
+      apiKeyHash,
       lastSeen: new Date(),
     });
 
@@ -53,7 +54,12 @@ export class AgentService {
     return agentDocs.map((doc) => this.documentToAgent(doc));
   }
 
-  async update(id: string, input: Partial<UpdateAgentInput & { soulHash: string }>): Promise<Agent | null> {
+  async findByApiKeyHash(apiKeyHash: string): Promise<Agent | null> {
+    const agentDoc = await AgentModel.findOne({ apiKeyHash });
+    return agentDoc ? this.documentToAgent(agentDoc) : null;
+  }
+
+  async update(id: string, input: Partial<UpdateAgentInput & { soulHash: string; apiKeyHash: string }>): Promise<Agent | null> {
     const agentDoc = await AgentModel.findByIdAndUpdate(
       id,
       { $set: input },
@@ -231,6 +237,12 @@ export class AgentService {
     });
   }
 
+  async regenerateApiKey(agentId: string, newApiKeyHash: string): Promise<void> {
+    await AgentModel.findByIdAndUpdate(agentId, {
+      $set: { apiKeyHash: newApiKeyHash }
+    });
+  }
+
   async markStaleAgentsOffline(timeoutMs: number = 60000): Promise<number> {
     const cutoffTime = new Date(Date.now() - timeoutMs);
     
@@ -255,6 +267,7 @@ export class AgentService {
       status: doc.status,
       metadata: doc.metadata,
       soulHash: doc.soulHash,
+      apiKeyHash: doc.apiKeyHash,
       createdAt: doc.createdAt,
       lastSeen: doc.lastSeen,
       friends: doc.friends,

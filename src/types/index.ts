@@ -13,6 +13,7 @@ export interface Agent {
   status: AgentStatus;
   metadata: Record<string, unknown>;
   soulHash: string;
+  apiKeyHash?: string;
   createdAt: Date;
   lastSeen: Date;
   friends?: string[];
@@ -29,6 +30,7 @@ export interface IAgentDocument extends mongoose.Document {
   status: AgentStatus;
   metadata: Record<string, unknown>;
   soulHash: string;
+  apiKeyHash?: string;
   createdAt: Date;
   lastSeen: Date;
   friends: string[];

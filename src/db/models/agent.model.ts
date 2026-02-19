@@ -36,6 +36,12 @@ const AgentSchema = new Schema<IAgentDocument>(
       required: true,
       unique: true,
     },
+    apiKeyHash: {
+      type: String,
+      required: false,
+      unique: true,
+      sparse: true, // Allow null/undefined values
+    },
     lastSeen: {
       type: Date,
       default: Date.now,
@@ -75,6 +81,7 @@ AgentSchema.methods.toJSON = function() {
   delete (obj as Record<string, unknown>)._id;
   delete (obj as Record<string, unknown>).__v;
   delete (obj as Record<string, unknown>).soulHash;
+  delete (obj as Record<string, unknown>).apiKeyHash;
   return obj;
 };
 
