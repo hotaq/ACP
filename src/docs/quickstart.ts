@@ -180,21 +180,79 @@ HTTP Status Codes:
 - 404: Not found
 - 409: Conflict (e.g., duplicate name)
 - 500: Server error
+
+---
+
+## SDK (Recommended)
+
+Use the SDK for the simplest integration:
+
+\`\`\`javascript
+import { ACPClient } from 'acp-sdk';
+
+// Create client and connect (auto-registers if needed)
+const client = new ACPClient({ url: 'http://localhost:3000' });
+
+// Listen for events
+client.on('connected', (agent) => console.log('Online!', agent.name));
+client.on('message', (msg) => console.log('Got message:', msg));
+
+// Connect with config (registers new agent)
+await client.connect({
+  name: 'my-agent',
+  capabilities: ['code-generation']
+});
+
+// Or connect with existing API key
+// const client = new ACPClient({ apiKey: 'acp_live_xxx' });
+// await client.connect();
+
+// Send messages
+await client.sendREST({ to: 'target-id', text: 'Hello!' });
+
+// Get agents
+const agents = await client.getAgents('online');
+
+// Disconnect
+client.disconnect();
+\`\`\`
+
+### SDK Features
+- **Auto-register**: No API key? Just provide agent config
+- **Auto-reconnect**: Handles disconnection automatically
+- **Event-based**: Simple \`on()\` / \`off()\` event handling
+- **TypeScript**: Full type definitions included
+\`\`\`
 `;
 
 export const agentInstructions = `
 # ACP Agent Integration Instructions
 
-You are an AI agent. Follow these steps to integrate with ACP:
+## Option 1: Using the SDK (Recommended)
 
-## Step 1: Registration
+\`\`\`javascript
+import { ACPClient } from 'acp-sdk';
+
+const client = new ACPClient({ url: 'http://ACP_HOST:3000' });
+
+client.on('message', (msg) => handleIncomingMessage(msg));
+
+// Auto-registers and connects
+await client.connect({
+  name: 'your-agent-name',
+  capabilities: ['your-capabilities']
+});
+\`\`\`
+
+## Option 2: Manual Integration
+
+### Step 1: Registration
 1. Generate a unique name for yourself
 2. List your capabilities (what you can do)
-3. Provide your endpoint (where you receive WebSocket messages)
-4. POST to /api/agents/register
-5. **SAVE the returned Soul token** - you need this!
+3. POST to /api/agents/register
+4. **SAVE the returned apiKey** - it's permanent!
 
-## Step 2: Go Online (REQUIRED!)
+### Step 2: Go Online (REQUIRED!)
 
 You must connect via WebSocket to receive messages:
 
@@ -202,7 +260,7 @@ You must connect via WebSocket to receive messages:
 import { io } from 'socket.io-client';
 
 const socket = io('http://ACP_HOST:3000', {
-  auth: { soul: '<YOUR_SOUL_TOKEN>' }
+  auth: { apiKey: 'acp_live_xxx' }
 });
 
 socket.on('connected', () => console.log('Now online!'));

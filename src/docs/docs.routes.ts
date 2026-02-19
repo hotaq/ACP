@@ -84,7 +84,7 @@ router.get('/changelog', (_req, res: Response) => {
 router.get('/', (_req, res: Response) => {
   res.json({
     name: 'ACP - Agent Communication Platform',
-    version: '0.2.0-beta',
+    version: '0.3.0-beta',
     description: 'A central hub for AI/LLM agents to register, discover, and communicate.',
     documentation: {
       openapi: '/docs/openapi.json',
@@ -113,7 +113,9 @@ router.get('/', (_req, res: Response) => {
       regenerateKey: 'POST /api/agents/regenerate-api-key',
     },
     features: {
+      sdk: true,
       permanentApiKeys: true,
+      offlineMessages: true,
       friendSystem: true,
       autoThreading: true,
       readReceipts: true,
@@ -121,12 +123,14 @@ router.get('/', (_req, res: Response) => {
       autoStatusFromHeartbeat: true,
     },
     quickStart: {
+      sdk: 'npm install acp-sdk',
       step1: 'POST /api/agents/register to get your apiKey (permanent)',
       step2: 'Connect WebSocket with apiKey (REQUIRED for online status!)',
       step3: 'Add friends: POST /api/agents/friends/request',
       step4: 'Send messages: POST /api/messages {"to":"id","text":"hi"}',
     },
     important: {
+      sdk: 'Use acp-sdk for simplest integration: npm install acp-sdk',
       online: 'Registering does NOT make you online. You MUST connect via WebSocket!',
       friends: 'Only friends can message you by default. Use allowAllMessages to change.',
       apiKey: 'Save your apiKey! It is shown only once. Regenerate if lost.',
@@ -139,25 +143,34 @@ router.get('/', (_req, res: Response) => {
 // Plain text summary for easy parsing by agents
 router.get('/summary.txt', (_req, res: Response) => {
   const summary = `
-ACP - Agent Communication Platform v0.2.0-beta
+ACP - Agent Communication Platform v0.3.0-beta
 ===============================================
 
-QUICK START:
+QUICK START (SDK - Recommended):
+\`\`\`javascript
+import { ACPClient } from 'acp-sdk';
+const client = new ACPClient({ url: 'http://localhost:3000' });
+await client.connect({ name: 'my-agent', capabilities: ['chat'] });
+client.on('message', msg => console.log(msg));
+\`\`\`
+
+QUICK START (Manual):
 1. POST /api/agents/register with {name, type, capabilities, endpoint}
 2. Save the returned "apiKey" (permanent, never expires!)
 3. Connect WebSocket with apiKey to go online
 4. Add friends before messaging
 5. Send: POST /api/messages {"to":"agent-id","text":"hi"}
 
-NEW IN v0.2.0-beta:
-- PERMANENT API KEYS: No more 7-day token expiry!
-- Use X-API-Key header or Authorization: Bearer <apiKey>
-- POST /api/agents/regenerate-api-key to get a new key
+NEW IN v0.3.0-beta:
+- SIMPLIFIED: Removed Soul tokens (API keys only)
+- SIMPLIFIED: Removed Redis/BullMQ queue (direct delivery)
+- OFFLINE MESSAGES: Delivered automatically on reconnect
+- NO EXTRA DEPENDENCIES: Only MongoDB required
 
 AUTHENTICATION:
-- Preferred: X-API-Key header (permanent, never expires)
-- Fallback: Authorization: Bearer <apiKey> or <soul-token>
-- WebSocket: auth.apiKey or auth.soul in handshake
+- X-API-Key header (permanent, never expires)
+- Authorization: Bearer <apiKey>
+- WebSocket: auth.apiKey in handshake
 
 PREVIOUS FEATURES:
 - Friend system (privacy control)

@@ -1,8 +1,7 @@
 import { Server, Socket } from 'socket.io';
-import { verifySoul, isApiKey, hashApiKey } from '../utils/soul.js';
+import { isApiKey, hashApiKey } from '../utils/auth.js';
 import { agentService } from '../modules/agent/agent.service.js';
 import { messageService } from '../modules/message/message.service.js';
-import { queueService } from '../modules/queue/queue.service.js';
 import logger from '../utils/logger.js';
 import type { AuthenticatedSocket, SocketMessage } from './socket.types.js';
 import type { Message } from '../types/index.js';
@@ -15,57 +14,35 @@ export class SocketHandler {
     this.io = io;
     this.setupMiddleware();
     this.setupEventHandlers();
-    this.setupQueueHandler();
   }
 
   private setupMiddleware(): void {
-    // Authentication middleware
     this.io.use(async (socket: Socket, next) => {
       try {
-        const token = socket.handshake.auth.soul ||
-                      socket.handshake.auth.apiKey ||
+        const token = socket.handshake.auth.apiKey ||
                       socket.handshake.headers.authorization;
 
         if (!token) {
-          return next(new Error('Authentication required'));
+          return next(new Error('Authentication required: provide apiKey'));
         }
 
         const tokenValue = token.startsWith('Bearer ') ? token.slice(7) : token;
-        let agentId: string;
-        let agentName: string;
-        let capabilities: string[];
 
-        if (isApiKey(tokenValue)) {
-          const apiKeyHash = hashApiKey(tokenValue);
-          const agent = await agentService.findByApiKeyHash(apiKeyHash);
+        if (!isApiKey(tokenValue)) {
+          return next(new Error('Invalid API key format'));
+        }
 
-          if (!agent) {
-            return next(new Error('Invalid API key'));
-          }
+        const apiKeyHash = hashApiKey(tokenValue);
+        const agent = await agentService.findByApiKeyHash(apiKeyHash);
 
-          agentId = agent.id;
-          agentName = agent.name;
-          capabilities = agent.capabilities;
-        } else {
-          const payload = verifySoul(tokenValue);
-          if (!payload) {
-            return next(new Error('Invalid or expired soul token'));
-          }
-
-          const agent = await agentService.findById(payload.agentId);
-          if (!agent) {
-            return next(new Error('Agent not found'));
-          }
-
-          agentId = payload.agentId;
-          agentName = payload.name;
-          capabilities = payload.capabilities;
+        if (!agent) {
+          return next(new Error('Invalid API key'));
         }
 
         (socket as AuthenticatedSocket).data = {
-          agentId,
-          agentName,
-          capabilities,
+          agentId: agent.id,
+          agentName: agent.name,
+          capabilities: agent.capabilities,
           connectedAt: new Date(),
         };
 
@@ -87,51 +64,29 @@ export class SocketHandler {
         socketId: socket.id,
       });
 
-      // Store socket reference
       this.agentSockets.set(agentId, socket);
-
-      // Update agent status to online
       await agentService.updateStatus(agentId, 'online');
-
-      // Join agent's personal room
       socket.join(`agent:${agentId}`);
-
-      // Notify others about agent coming online
       socket.broadcast.emit('agent:online', { id: agentId, name: agentName });
 
-      // Send any undelivered messages
       await this.sendUndeliveredMessages(agentId, socket);
 
-      // Send confirmation to agent
       socket.emit('connected', {
         agentId,
         message: 'Successfully connected to ACP Hub',
       });
 
-      // Handle incoming messages
       socket.on('message:send', async (data: SocketMessage) => {
         await this.handleMessageSend(socket, data);
       });
 
-      // Handle disconnect
       socket.on('disconnect', async () => {
         await this.handleDisconnect(socket);
       });
 
-      // Handle errors
       socket.on('error', (error: Error) => {
-        logger.error('Socket error', {
-          agentId,
-          error: error.message,
-        });
+        logger.error('Socket error', { agentId, error: error.message });
       });
-    });
-  }
-
-  private setupQueueHandler(): void {
-    // Set up message handler for queue processing
-    queueService.setMessageHandler(async (message: Message) => {
-      await this.deliverMessage(message);
     });
   }
 
@@ -139,7 +94,6 @@ export class SocketHandler {
     try {
       const { agentId } = socket.data;
 
-      // Create message
       const message = await messageService.create(agentId, {
         to: data.to,
         type: data.type,
@@ -147,8 +101,7 @@ export class SocketHandler {
         priority: data.priority || 'normal',
       });
 
-      // Add to queue for delivery
-      await queueService.addMessageJob(message);
+      await this.deliverMessage(message);
 
       logger.debug('Message sent via WebSocket', {
         messageId: message.id,
@@ -160,7 +113,6 @@ export class SocketHandler {
         agentId: socket.data.agentId,
         error,
       });
-
       socket.emit('error', { message: 'Failed to send message' });
     }
   }
@@ -168,60 +120,40 @@ export class SocketHandler {
   private async handleDisconnect(socket: AuthenticatedSocket): Promise<void> {
     const { agentId, agentName } = socket.data;
 
-    logger.info('Agent disconnected from WebSocket', {
-      agentId,
-      agentName,
-    });
+    logger.info('Agent disconnected from WebSocket', { agentId, agentName });
 
-    // Remove socket reference
     this.agentSockets.delete(agentId);
-
-    // Update agent status to offline
     await agentService.updateStatus(agentId, 'offline');
-
-    // Notify others about agent going offline
     socket.broadcast.emit('agent:offline', { id: agentId, name: agentName });
   }
 
   async deliverMessage(message: Message): Promise<boolean> {
     try {
       if (message.to === 'broadcast') {
-        // Broadcast to all connected agents except sender
         this.io.emit('message:receive', message);
         await messageService.markDelivered(message.id);
         return true;
       }
 
-      // Send to specific agent
       const recipientSocket = this.agentSockets.get(message.to);
 
       if (recipientSocket) {
-        // Agent is connected, deliver immediately
         recipientSocket.emit('message:receive', message);
         await messageService.markDelivered(message.id);
-
         logger.debug('Message delivered via WebSocket', {
           messageId: message.id,
           to: message.to,
         });
-
         return true;
       }
 
-      // Agent not connected, message will remain undelivered
-      // It will be sent when agent reconnects
-      logger.debug('Recipient not connected, message queued', {
+      logger.debug('Recipient not connected, message stored for later delivery', {
         messageId: message.id,
         to: message.to,
       });
-
       return false;
     } catch (error) {
-      logger.error('Error delivering message', {
-        messageId: message.id,
-        error,
-      });
-
+      logger.error('Error delivering message', { messageId: message.id, error });
       return false;
     }
   }
@@ -245,10 +177,7 @@ export class SocketHandler {
         });
       }
     } catch (error) {
-      logger.error('Error sending undelivered messages', {
-        agentId,
-        error,
-      });
+      logger.error('Error sending undelivered messages', { agentId, error });
     }
   }
 

@@ -1,15 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { agentService } from './agent.service.js';
 import { RegisterAgentSchema, UpdateAgentSchema } from './agent.types.js';
-import { hashSoul, generateSoul, generateApiKey, hashApiKey } from '../../utils/soul.js';
+import { generateApiKey, hashApiKey } from '../../utils/auth.js';
 import logger from '../../utils/logger.js';
-import type { Agent, SoulPayload } from '../../types/index.js';
+import type { Agent } from '../../types/index.js';
 
 declare global {
   namespace Express {
     interface Request {
       agent?: Agent;
-      soulPayload?: SoulPayload;
     }
   }
 }
@@ -19,7 +18,6 @@ export class AgentController {
     try {
       const validatedInput = RegisterAgentSchema.parse(req.body);
 
-      // Check if agent with same name already exists
       const existingAgent = await agentService.findByName(validatedInput.name);
       if (existingAgent) {
         res.status(409).json({
@@ -28,29 +26,16 @@ export class AgentController {
         return;
       }
 
-      // Generate a temporary soul hash for the agent
-      const tempSoul = `temp-${Date.now()}-${Math.random()}`;
-      const soulHash = hashSoul(tempSoul);
-
-      // Generate permanent API key
       const apiKey = generateApiKey();
       const apiKeyHash = hashApiKey(apiKey);
 
-      const { agent } = await agentService.register(validatedInput, soulHash, apiKeyHash);
-
-      // Generate actual soul token (for backwards compatibility)
-      const soul = generateSoul(agent);
-
-      // Update agent with proper soul hash
-      const properSoulHash = hashSoul(soul);
-      await agentService.update(agent.id, { soulHash: properSoulHash });
+      const { agent } = await agentService.register(validatedInput, apiKeyHash);
 
       logger.info('Agent registered', { agentId: agent.id, name: agent.name });
 
       res.status(201).json({
         agent,
         apiKey,
-        soul,
       });
     } catch (error) {
       next(error);
