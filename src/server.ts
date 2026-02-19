@@ -80,8 +80,8 @@ export const startServer = async () => {
 
   queueService.startWorker();
 
-  const STALE_CHECK_INTERVAL_MS = 30000;
-  const STALE_TIMEOUT_MS = 60000;
+  const STALE_CHECK_INTERVAL_MS = 60000; // Check every 1 minute
+  const STALE_TIMEOUT_MS = 300000; // Mark offline after 5 minutes of inactivity
   
   setInterval(async () => {
     try {
