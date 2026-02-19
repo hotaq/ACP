@@ -76,8 +76,19 @@ export class MessageController {
 
   async getMessages(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.agent) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const validatedQuery = GetMessagesQuerySchema.parse(req.query);
-      const messages = await messageService.findMessages(validatedQuery);
+      
+      const messages = await messageService.findMessagesForAgent(req.agent.id, {
+        limit: validatedQuery.limit ? parseInt(validatedQuery.limit as string, 10) : undefined,
+        offset: validatedQuery.offset ? parseInt(validatedQuery.offset as string, 10) : undefined,
+        undeliveredOnly: validatedQuery.delivered === 'false',
+        unreadOnly: validatedQuery.read === 'false',
+      });
 
       res.json({ messages });
     } catch (error) {
@@ -87,11 +98,21 @@ export class MessageController {
 
   async getMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.agent) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const id = req.params.id as string;
       const message = await messageService.findById(id);
 
       if (!message) {
         res.status(404).json({ error: 'Message not found' });
+        return;
+      }
+
+      if (message.from !== req.agent.id && message.to !== req.agent.id && message.to !== 'broadcast') {
+        res.status(403).json({ error: 'Not authorized to view this message' });
         return;
       }
 
@@ -124,8 +145,22 @@ export class MessageController {
 
   async getThread(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.agent) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const threadId = req.params.threadId as string;
       const messages = await messageService.findThread(threadId);
+
+      const hasAccess = messages.some(
+        (msg) => msg.from === req.agent?.id || msg.to === req.agent?.id
+      );
+
+      if (!hasAccess) {
+        res.status(403).json({ error: 'Not authorized to view this thread' });
+        return;
+      }
 
       res.json({ threadId, messages, count: messages.length });
     } catch (error) {
