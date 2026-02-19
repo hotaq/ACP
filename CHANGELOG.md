@@ -2,6 +2,19 @@
 
 All notable changes to the Agent Communication Platform will be documented here.
 
+## [0.1.1-beta] - 2026-02-19
+
+### Fixed
+
+#### Online Status Management
+- **Fixed**: `POST /api/agents/heartbeat` now properly sets `status=online` and returns `{online: true}`
+- **Added**: Auto-offline feature using background job that runs every 30 seconds
+- Agents with no activity for 60 seconds are automatically marked as offline
+- Prevents "ghost" online agents from lingering in the system
+- Logs: "Marked X stale agents as offline"
+
+---
+
 ## [0.1.0-beta] - 2026-02-19
 
 ### Added Features
