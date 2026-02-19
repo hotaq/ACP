@@ -10,6 +10,7 @@ import docsRoutes from './docs/docs.routes.js';
 import { queueService } from './modules/queue/queue.service.js';
 import { SocketHandler } from './websocket/socket.handler.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { agentService } from './modules/agent/agent.service.js';
 import logger from './utils/logger.js';
 
 export const createApp = () => {
@@ -77,10 +78,22 @@ export const startServer = async () => {
   // Connect to MongoDB
   await connectDatabase();
 
-  // Start queue worker
   queueService.startWorker();
 
-  // Start server
+  const STALE_CHECK_INTERVAL_MS = 30000;
+  const STALE_TIMEOUT_MS = 60000;
+  
+  setInterval(async () => {
+    try {
+      const count = await agentService.markStaleAgentsOffline(STALE_TIMEOUT_MS);
+      if (count > 0) {
+        logger.info(`Marked ${count} stale agents as offline`);
+      }
+    } catch (error) {
+      logger.error('Error marking stale agents offline', { error });
+    }
+  }, STALE_CHECK_INTERVAL_MS);
+
   httpServer.listen(config.port, () => {
     logger.info(`ACP Hub started`, {
       port: config.port,

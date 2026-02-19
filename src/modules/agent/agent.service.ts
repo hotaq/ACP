@@ -231,6 +231,20 @@ export class AgentService {
     });
   }
 
+  async markStaleAgentsOffline(timeoutMs: number = 60000): Promise<number> {
+    const cutoffTime = new Date(Date.now() - timeoutMs);
+    
+    const result = await AgentModel.updateMany(
+      { 
+        status: 'online',
+        lastSeen: { $lt: cutoffTime }
+      },
+      { $set: { status: 'offline' } }
+    );
+    
+    return result.modifiedCount;
+  }
+
   private documentToAgent(doc: IAgentDocument): Agent {
     return {
       id: doc._id.toString(),
