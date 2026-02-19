@@ -3,8 +3,7 @@ import type { Agent, IAgentDocument } from '../../types/index.js';
 import type { RegisterAgentInput, UpdateAgentInput } from './agent.types.js';
 
 export class AgentService {
-  async register(input: RegisterAgentInput, soulHash: string, apiKeyHash?: string): Promise<{ agent: Agent }> {
-    // Create agent document
+  async register(input: RegisterAgentInput, apiKeyHash: string): Promise<{ agent: Agent }> {
     const agentDoc = await AgentModel.create({
       name: input.name,
       type: input.type,
@@ -12,7 +11,6 @@ export class AgentService {
       endpoint: input.endpoint,
       status: 'offline',
       metadata: input.metadata || {},
-      soulHash,
       apiKeyHash,
       lastSeen: new Date(),
     });
@@ -24,11 +22,6 @@ export class AgentService {
 
   async findById(id: string): Promise<Agent | null> {
     const agentDoc = await AgentModel.findById(id);
-    return agentDoc ? this.documentToAgent(agentDoc) : null;
-  }
-
-  async findBySoulHash(soulHash: string): Promise<Agent | null> {
-    const agentDoc = await AgentModel.findOne({ soulHash });
     return agentDoc ? this.documentToAgent(agentDoc) : null;
   }
 
@@ -59,7 +52,7 @@ export class AgentService {
     return agentDoc ? this.documentToAgent(agentDoc) : null;
   }
 
-  async update(id: string, input: Partial<UpdateAgentInput & { soulHash: string; apiKeyHash: string }>): Promise<Agent | null> {
+  async update(id: string, input: Partial<UpdateAgentInput & { apiKeyHash: string }>): Promise<Agent | null> {
     const agentDoc = await AgentModel.findByIdAndUpdate(
       id,
       { $set: input },
@@ -266,7 +259,6 @@ export class AgentService {
       endpoint: doc.endpoint,
       status: doc.status,
       metadata: doc.metadata,
-      soulHash: doc.soulHash,
       apiKeyHash: doc.apiKeyHash,
       createdAt: doc.createdAt,
       lastSeen: doc.lastSeen,

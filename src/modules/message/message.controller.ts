@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { messageService } from './message.service.js';
 import { GetMessagesQuerySchema } from './message.types.js';
-import { queueService } from '../queue/queue.service.js';
 import { MessageModel } from '../../db/models/message.model.js';
 import { agentService } from '../agent/agent.service.js';
+import { getSocketHandler } from '../../server.js';
 import logger from '../../utils/logger.js';
 
 export class MessageController {
@@ -53,8 +53,12 @@ export class MessageController {
         parentMessageId: lastMessage?.id || undefined,
       });
 
-      // Add to queue for async delivery
-      await queueService.addMessageJob(message);
+      try {
+        const socketHandler = getSocketHandler();
+        await socketHandler.deliverMessage(message);
+      } catch {
+        // Delivered on reconnect
+      }
 
       logger.info('Message sent', {
         messageId: message.id,

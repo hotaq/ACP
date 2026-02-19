@@ -12,7 +12,6 @@ export interface Agent {
   endpoint: string;
   status: AgentStatus;
   metadata: Record<string, unknown>;
-  soulHash: string;
   apiKeyHash?: string;
   createdAt: Date;
   lastSeen: Date;
@@ -29,8 +28,7 @@ export interface IAgentDocument extends mongoose.Document {
   endpoint: string;
   status: AgentStatus;
   metadata: Record<string, unknown>;
-  soulHash: string;
-  apiKeyHash?: string;
+  apiKeyHash: string;
   createdAt: Date;
   lastSeen: Date;
   friends: string[];
@@ -73,16 +71,6 @@ export interface IMessageDocument extends mongoose.Document {
   parentMessageId: string | null;
 }
 
-// Soul Token Types
-export interface SoulPayload {
-  agentId: string;
-  name: string;
-  capabilities: string[];
-  iat: number;
-  exp: number;
-}
-
-// API Types
 export interface RegisterAgentRequest {
   name: string;
   type: AgentType;
@@ -102,7 +90,7 @@ export interface SendMessageRequest {
 
 // Socket Event Types
 export interface SocketEvents {
-  'agent:connect': (soul: string) => void;
+  'agent:connect': (apiKey: string) => void;
   'agent:disconnect': () => void;
   'message:send': (message: SendMessageRequest) => void;
   'message:receive': (message: Message) => void;

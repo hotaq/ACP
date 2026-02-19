@@ -7,21 +7,27 @@ import { connectDatabase } from './db/connection.js';
 import agentRoutes from './modules/agent/agent.routes.js';
 import messageRoutes from './modules/message/message.routes.js';
 import docsRoutes from './docs/docs.routes.js';
-import { queueService } from './modules/queue/queue.service.js';
 import { SocketHandler } from './websocket/socket.handler.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { agentService } from './modules/agent/agent.service.js';
 import logger from './utils/logger.js';
 
+let socketHandlerInstance: SocketHandler | null = null;
+
+export const getSocketHandler = (): SocketHandler => {
+  if (!socketHandlerInstance) {
+    throw new Error('SocketHandler not initialized');
+  }
+  return socketHandlerInstance;
+};
+
 export const createApp = () => {
   const app = express();
 
-  // Middleware
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Request logging
   app.use((req, _res, next) => {
     logger.debug(`${req.method} ${req.path}`, {
       query: req.query,
@@ -30,7 +36,6 @@ export const createApp = () => {
     next();
   });
 
-  // Health check
   app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
@@ -39,22 +44,15 @@ export const createApp = () => {
     });
   });
 
-  // Root endpoint - redirect to docs
   app.get('/', (_req, res) => {
     res.redirect('/docs');
   });
 
-  // Documentation Routes
   app.use('/docs', docsRoutes);
-
-  // API Routes
   app.use('/api/agents', agentRoutes);
   app.use('/api/messages', messageRoutes);
 
-  // 404 handler
   app.use(notFoundHandler);
-
-  // Error handler
   app.use(errorHandler);
 
   return app;
@@ -64,7 +62,6 @@ export const startServer = async () => {
   const app = createApp();
   const httpServer = createServer(app);
 
-  // Setup Socket.io
   const io = new Server(httpServer, {
     cors: {
       origin: '*',
@@ -72,16 +69,12 @@ export const startServer = async () => {
     },
   });
 
-  // Initialize socket handler
-  const socketHandler = new SocketHandler(io);
+  socketHandlerInstance = new SocketHandler(io);
 
-  // Connect to MongoDB
   await connectDatabase();
 
-  queueService.startWorker();
-
-  const STALE_CHECK_INTERVAL_MS = 60000; // Check every 1 minute
-  const STALE_TIMEOUT_MS = 300000; // Mark offline after 5 minutes of inactivity
+  const STALE_CHECK_INTERVAL_MS = 60000;
+  const STALE_TIMEOUT_MS = 300000;
   
   setInterval(async () => {
     try {
@@ -103,7 +96,6 @@ export const startServer = async () => {
     logger.info(`WebSocket available at ws://localhost:${config.port}`);
   });
 
-  // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down gracefully...');
 
@@ -111,7 +103,6 @@ export const startServer = async () => {
       logger.info('HTTP server closed');
 
       try {
-        await queueService.close();
         const { disconnectDatabase } = await import('./db/connection.js');
         await disconnectDatabase();
 
@@ -123,7 +114,6 @@ export const startServer = async () => {
       }
     });
 
-    // Force shutdown after 10 seconds
     setTimeout(() => {
       logger.error('Forced shutdown after timeout');
       process.exit(1);
@@ -133,5 +123,5 @@ export const startServer = async () => {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  return { app, httpServer, io, socketHandler };
+  return { app, httpServer, io, socketHandler: socketHandlerInstance };
 };
