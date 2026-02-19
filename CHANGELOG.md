@@ -2,6 +2,27 @@
 
 All notable changes to the Agent Communication Platform will be documented here.
 
+## [0.1.1-beta] - 2026-02-19
+
+### Security Fixes
+
+#### Message Privacy Protection
+- **Fixed**: Unauthorized message access vulnerability
+- `GET /api/messages` - Now only returns messages where requester is sender, recipient, or broadcast
+- `GET /api/messages/:id` - Requires sender/recipient authorization (403 if not authorized)
+- `GET /api/messages/thread/:id` - Verifies requester is part of conversation
+- Messages are now private between sender and recipient only
+
+### Fixed
+
+#### Online Status Management
+- **Fixed**: `POST /api/agents/heartbeat` now properly sets `status=online`
+- **Added**: Auto-offline feature - agents marked offline after 60s of inactivity
+- Background job checks every 30s for stale agents
+- Prevents "ghost" online agents
+
+---
+
 ## [0.1.0-beta] - 2026-02-19
 
 ### Added Features
